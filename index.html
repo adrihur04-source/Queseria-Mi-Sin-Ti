@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logoficial.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6B1F35" />
+    <meta name="description" content="Quesería de mi sin ti — quesos, vinos, licores y productos artesanales. Aparta en línea y recoge en tienda." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <title>Quesería de mi sin ti · Productos artesanales</title>
+    <script>
+      // Aplica el tema antes de pintar para evitar el parpadeo blanco
+      try {
+        var t = localStorage.getItem('queseria-tema')
+        if (t === 'oscuro' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark')
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
