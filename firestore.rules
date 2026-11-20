@@ -1,0 +1,94 @@
+rules_version = '2';
+// Reglas de seguridad — Quesería de mi sin ti
+// Roles en usuarios/{uid}.role: 'admin' | 'empleado' | 'cliente'
+// Pégalas en Firebase Console → Firestore Database → Reglas → Publicar.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function perfil() { return get(/databases/$(database)/documents/usuarios/$(uid())).data; }
+    function rol() { return autenticado() && exists(/databases/$(database)/documents/usuarios/$(uid())) ? perfil().role : null; }
+    function esAdmin() { return rol() == 'admin'; }
+    function esPersonal() { return rol() in ['admin', 'empleado']; }
+    function soloCambia(campos) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos); }
+
+    // ── Catálogo ──
+    match /productos/{id} {
+      allow read: if true;                                   // la portada es pública
+      allow create, delete: if esPersonal();
+      allow update: if esPersonal()
+        || (autenticado() && soloCambia(['stock', 'agotadoEn'])); // apartar / cancelar pedido
+      match /lotes/{lote} {
+        allow read, write: if esPersonal();
+      }
+    }
+    match /categorias/{id}  { allow read: if true; allow write: if esAdmin(); }
+    match /proveedores/{id} { allow read: if esPersonal(); allow write: if esAdmin(); }
+    match /roles/{id}       { allow read: if autenticado(); allow write: if esAdmin(); }
+    match /configuracion/{id} { allow read: if true; allow write: if esAdmin(); }
+
+    // ── Usuarios ──
+    match /usuarios/{userId} {
+      allow read: if autenticado() && (uid() == userId || esPersonal());
+      allow create: if esAdmin()
+        || (autenticado() && uid() == userId && request.resource.data.get('role', 'cliente') == 'cliente');
+      // Cada quien edita su perfil (foto, datos, direcciones, puntos) pero no su rol ni si está activo
+      allow update: if esAdmin()
+        || (autenticado() && uid() == userId
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'activo']));
+      allow delete: if esAdmin();
+      match /favoritos/{productoId} {
+        allow read, write: if autenticado() && uid() == userId;
+      }
+    }
+
+    // ── Pedidos ──
+    match /pedidos/{id} {
+      allow read: if autenticado() && (resource.data.clienteId == uid() || esPersonal());
+      allow create: if autenticado() && request.resource.data.clienteId == uid()
+        && request.resource.data.status == 'pendiente';
+      allow update: if esPersonal()
+        // el cliente solo puede cancelar su pedido mientras siga pendiente
+        || (autenticado() && resource.data.clienteId == uid()
+            && resource.data.status == 'pendiente'
+            && request.resource.data.status == 'cancelado'
+            && soloCambia(['status']));
+      allow delete: if esAdmin();
+    }
+
+    // ── Club Quesero ──
+    match /codigos/{codigo} {
+      allow read: if autenticado();
+      allow write: if autenticado() && request.resource.data.uid == uid();
+    }
+    match /referidos/{amigoId} {
+      allow read: if autenticado() && (resource.data.referidorId == uid() || amigoId == uid() || esPersonal());
+      allow create: if autenticado() && amigoId == uid() && request.resource.data.amigoId == uid()
+        && request.resource.data.referidorId != uid();
+      allow delete: if autenticado() && (amigoId == uid() || esAdmin());
+    }
+
+    // ── Reseñas y avisos ──
+    match /resenas/{id} {
+      allow read: if true;
+      allow create, update: if autenticado() && request.resource.data.clienteId == uid()
+        && request.resource.data.estrellas is int
+        && request.resource.data.estrellas >= 1 && request.resource.data.estrellas <= 5;
+      allow delete: if esAdmin() || (autenticado() && resource.data.clienteId == uid());
+    }
+    match /avisosStock/{id} {
+      allow read: if autenticado() && (resource.data.clienteId == uid() || esPersonal());
+      allow create: if autenticado() && request.resource.data.clienteId == uid();
+      allow delete: if autenticado() && (resource.data.clienteId == uid() || esPersonal());
+    }
+
+    // ── Registros internos ──
+    match /bitacora/{id}            { allow create: if autenticado(); allow read: if esAdmin(); }
+    match /historialInventario/{id} { allow read, write: if esPersonal(); }
+    match /notificaciones/{id} {
+      allow create: if autenticado();
+      allow read, update, delete: if esPersonal();
+    }
+  }
+}
